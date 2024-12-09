@@ -9,7 +9,7 @@ with st.sidebar:
     "[View the source code](https://github.com/streamlit/llm-examples/blob/main/Chatbot.py)"
     "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
 
-st.title("💬 Chatbot with Azure OpenAI (Streaming)")
+st.title("💬 Chatbot with Azure OpenAI")
 
 # Initialize session state for conversation history and feedback
 if "messages" not in st.session_state:
@@ -22,8 +22,8 @@ AZURE_API_KEY = "your_azure_openai_api_key"
 AZURE_ENDPOINT = "your_azure_openai_endpoint"
 DEPLOYMENT_NAME = "your_deployment_name"
 
-# Function to query Azure OpenAI with streaming
-def query_azure_openai_stream(prompt):
+# Function to query Azure OpenAI
+def query_azure_openai(prompt):
     url = f"{AZURE_ENDPOINT}/openai/deployments/{DEPLOYMENT_NAME}/completions?api-version=2023-03-15-preview"
     headers = {
         "Content-Type": "application/json",
@@ -33,23 +33,15 @@ def query_azure_openai_stream(prompt):
         "prompt": prompt,
         "max_tokens": 300,
         "temperature": 0.7,
-        "stream": True,
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers, stream=True)
+        response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-
-        for line in response.iter_lines():
-            if line:
-                try:
-                    line_content = line.decode("utf-8")
-                    response_json = json.loads(line_content)
-                    yield response_json.get("choices", [{}])[0].get("text", "")
-                except json.JSONDecodeError:
-                    yield f"Error: Failed to decode JSON. Response content: {line_content}"
+        response_data = response.json()
+        return response_data.get("choices", [{}])[0].get("text", "")
     except requests.exceptions.RequestException as e:
-        yield f"Error: Failed to query the Azure OpenAI API. {e}"
+        return f"Error: Failed to query the Azure OpenAI API. {e}"
 
 # Function to log feedback to a text file
 def log_feedback(feedback_entry):
@@ -88,15 +80,11 @@ if user_input:
         [f"{item['role']}: {item['content']}" for item in st.session_state["messages"]]
     )
 
-    # Stream the Azure OpenAI API response using st.write_stream
-    assistant_message = {"role": "assistant", "content": ""}
-    st.session_state["messages"].append(assistant_message)
+    # Query the Azure OpenAI API
+    response = query_azure_openai(conversation_context)
 
-    response_stream = query_azure_openai_stream(conversation_context)
-    streamed_response = st.write_stream(response_stream)
-
-    # Save the final response in the session state
-    assistant_message["content"] = streamed_response
+    # Add the assistant's response to the session state
+    st.session_state["messages"].append({"role": "assistant", "content": response})
 
     # Force UI refresh
     st.rerun()
